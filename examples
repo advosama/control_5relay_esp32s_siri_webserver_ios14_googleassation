@@ -1,245 +1,156 @@
-#include <stdio.h>
-#include <espressif/esp_wifi.h>
-#include <espressif/esp_sta.h>
-#include <esp/uart.h>
-#include <WiFi.h>
-#include <FreeRTOS.h>
-#include <task.h>
+/*********
+ esp32s nood mcu control 5 relay 220v from ip adress
+*********/
 
-#include <homekit/homekit.h>
-#include <homekit/characteristics.h>
-#include "wifi.h"
+// Import required libraries
+#include "WiFi.h"                         //define wifi for esp32
+#include "ESPAsyncWebServer.h"
 
-
-static void wifi_init() {
-    struct sdk_station_config wifi_config = {
-        .ssid = WIFI_SSID,
-        .password = WIFI_PASSWORD,
-    };
-
-    sdk_wifi_set_opmode(STATION_MODE);
-    sdk_wifi_station_set_config(&wifi_config);
-    sdk_wifi_station_connect();
-}
-
-const int relay1 = 2;
-const int relay2 = 4;
-const int relay3 = 27;
-const int relay4 = 25;
-const int relay5 = 26;
-bool relay1_on = false;
-bool relay2_on = false;
-bool relay3_on = false;
-bool relay4_on = false;
-bool relay5_on = false;
+//  to true to define Relay as Normally Open (NO)
+#define RELAY_NO    true
 
 
-void led_write(bool on) {
-    gpio_write(relay1, on ? 0 : 1);
-}
-
-void led_write2(bool on) {
-    gpio_write(relay2, on ? 0 : 1);
-}
-
-void led_write3(bool on) {
-    gpio_write(relay3, on ? 0 : 1);
-}
-
-void led_write4(bool on) {
-    gpio_write(relay4, on ? 0 : 1);
-}
-
-void led_write5(bool on) {
-    gpio_write(relay5, on ? 0 : 1);
-}
+#define NUM_RELAYS  5                //  number of relays
 
 
-void led_init() {
-  gpio_enable(relay1, GPIO_OUTPUT);
-  gpio_enable(relay2, GPIO_OUTPUT);
-  gpio_enable(relay3, GPIO_OUTPUT);
-  gpio_enable(relay4, GPIO_OUTPUT);
-  gpio_enable(relay5, GPIO_OUTPUT);
-    led_write(relay1_on);
-    led_write2(relay2_on);
-    led_write3(relay3_on);
-    led_write4(relay4_on);
-    led_write5(relay5_on);
-}
+int relayGPIOs[NUM_RELAYS] = {2, 26, 27, 25, 4};      // pin out from GPIO to a relay
 
 
-void led_identify_task(void *_args) {
-    for (int i=0; i<3; i++) {
-        for (int j=0; j<2; j++) {
-            led_write(true);
-            vTaskDelay(100 / portTICK_PERIOD_MS);
-            led_write(false);
-            vTaskDelay(100 / portTICK_PERIOD_MS);
-        }
+const char* ssid = "xxxxxxxxx";   // Replace xxxxx with your network ssd
+const char* password = "xxxxxxxx";  // Replace xxxxxx with your network password
 
-        vTaskDelay(250 / portTICK_PERIOD_MS);
+const char* PARAM_INPUT_1 = "relay";  
+const char* PARAM_INPUT_2 = "state";
+
+// Create AsyncWebServer object on port 80
+AsyncWebServer server(80);
+
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html {font-family: Arial; display: inline-block; text-align: center;}
+    h2 {font-size: 3.0rem;}
+    p {font-size: 3.0rem;}
+    body {max-width: 600px; margin:0px auto; padding-bottom: 25px;}
+    .switch {position: relative; display: inline-block; width: 120px; height: 68px} 
+    .switch input {display: none}
+    .slider {position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; border-radius: 34px}
+    .slider:before {position: absolute; content: ""; height: 52px; width: 52px; left: 8px; bottom: 8px; background-color: #fff; -webkit-transition: .4s; transition: .4s; border-radius: 68px}
+    input:checked+.slider {background-color: #2196F3}
+    input:checked+.slider:before {-webkit-transform: translateX(52px); -ms-transform: translateX(52px); transform: translateX(52px)}
+  </style>
+</head>
+<body>
+  <h2>ESP Web Server</h2>
+  %BUTTONPLACEHOLDER%
+<script>function toggleCheckbox(element) {
+  var xhr = new XMLHttpRequest();
+  if(element.checked){ xhr.open("GET", "/update?relay="+element.id+"&state=1", true); }
+  else { xhr.open("GET", "/update?relay="+element.id+"&state=0", true); }
+  xhr.send();
+}</script>
+</body>
+</html>
+)rawliteral";
+
+// Replaces placeholder with button section in your web page
+String processor(const String& var){
+  //Serial.println(var);
+  if(var == "BUTTONPLACEHOLDER"){
+    String buttons ="";
+    for(int i=1; i<=NUM_RELAYS; i++){
+      String relayStateValue = relayState(i);
+      buttons+= "<h4>Relay #" + String(i) + " - GPIO " + relayGPIOs[i-1] + "</h4><label class=\"switch\"><input type=\"checkbox\" onchange=\"toggleCheckbox(this)\" id=\"" + String(i) + "\" "+ relayStateValue +"><span class=\"slider\"></span></label>";
     }
-
-    led_write(relay1_on);
-
-    vTaskDelete(NULL);
+    return buttons;
+  }
+  return String();
 }
 
-
-void led_identify(homekit_value_t _value) {
-    printf("LED identify\n");
-    xTaskCreate(led_identify_task, "LED identify", 128, NULL, 2, NULL);
-}
-
-
-
-homekit_value_t relay1_on_get() {
-    return HOMEKIT_BOOL(relay1_on);
-}
-
-homekit_value_t relay2_on_get() {
-    return HOMEKIT_BOOL(relay2_on);
-}
-
-homekit_value_t relay3_on_get() {
-    return HOMEKIT_BOOL(relay3_on);
-}
-
-homekit_value_t relay4_on_get() {
-    return HOMEKIT_BOOL(relay4_on);
-}
-
-homekit_value_t relay5_on_get() {
-    return HOMEKIT_BOOL(relay5_on);
-}
-
-void relay1_on_set(homekit_value_t value) {
-    if (value.format != homekit_format_bool) {
-        printf("Invalid value format: %d\n", value.format);
-        return;
+String relayState(int numRelay){
+  if(RELAY_NO){
+    if(digitalRead(relayGPIOs[numRelay-1])){
+      return "";
     }
-
-    relay1_on = value.bool_value;
-    led_write(relay1_on);
-}
-
-void relay2_on_set(homekit_value_t value) {
-    if (value.format != homekit_format_bool) {
-        printf("Invalid value format: %d\n", value.format);
-        return;
+    else {
+      return "checked";
     }
-
-    relay2_on = value.bool_value;
-    led_write2(relay2_on);
-}
-
-void relay3_on_set(homekit_value_t value) {
-    if (value.format != homekit_format_bool) {
-        printf("Invalid value format: %d\n", value.format);
-        return;
+  }
+  else {
+    if(digitalRead(relayGPIOs[numRelay-1])){
+      return "checked";
     }
-
-    relay3_on = value.bool_value;
-    led_write3(relay3_on);
-}
-
-void relay4_on_set(homekit_value_t value) {
-    if (value.format != homekit_format_bool) {
-        printf("Invalid value format: %d\n", value.format);
-        return;
+    else {
+      return "";
     }
-
-    relay4_on = value.bool_value;
-    led_write4(relay4_on);
+  }
+  return "";
 }
 
-void relay5_on_set(homekit_value_t value) {
-    if (value.format != homekit_format_bool) {
-        printf("Invalid value format: %d\n", value.format);
-        return;
+void setup(){
+  // Serial port for debugging purposes
+  Serial.begin(115200);
+
+  // Set all relays to off when the program starts - if set to Normally Open (NO), the relay is off when you set the relay to HIGH
+  for(int i=1; i<=NUM_RELAYS; i++){
+    pinMode(relayGPIOs[i-1], OUTPUT);
+    if(RELAY_NO){
+      digitalWrite(relayGPIOs[i-1], HIGH);
     }
+    else{
+      digitalWrite(relayGPIOs[i-1], LOW);
+    }
+  }
+  
+  // Connect to Wi-Fi
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to WiFi..");
+  }
 
-    relay5_on = value.bool_value;
-    led_write5(relay5_on);
+  // Print ESP32 Local IP Address
+  Serial.println(WiFi.localIP());
+
+  // Route for root / web page
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/html", index_html, processor);
+  });
+
+  // Send a GET request to <ESP_IP>/update?relay=<inputMessage>&state=<inputMessage2>
+  server.on("/update", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    String inputMessage;
+    String inputParam;
+    String inputMessage2;
+    String inputParam2;
+    // GET input1 value on <ESP_IP>/update?relay=<inputMessage>
+    if (request->hasParam(PARAM_INPUT_1) & request->hasParam(PARAM_INPUT_2)) {
+      inputMessage = request->getParam(PARAM_INPUT_1)->value();
+      inputParam = PARAM_INPUT_1;
+      inputMessage2 = request->getParam(PARAM_INPUT_2)->value();
+      inputParam2 = PARAM_INPUT_2;
+      if(RELAY_NO){
+        Serial.print("NO ");
+        digitalWrite(relayGPIOs[inputMessage.toInt()-1], !inputMessage2.toInt());
+      }
+      else{
+        Serial.print("NC ");
+        digitalWrite(relayGPIOs[inputMessage.toInt()-1], inputMessage2.toInt());
+      }
+    }
+    else {
+      inputMessage = "No message sent";
+      inputParam = "none";
+    }
+    Serial.println(inputMessage + inputMessage2);
+    request->send(200, "text/plain", "OK");
+  });
+  // Start server
+  server.begin();
 }
+  
+void loop() {
 
-
-
-    relay8_on = value.bool_value;
-    led_write8(relay8_on);
-}
-
-homekit_accessory_t *accessories[] = {
-    HOMEKIT_ACCESSORY(.id=1, .category=homekit_accessory_category_switch, .services=(homekit_service_t*[]){
-        HOMEKIT_SERVICE(ACCESSORY_INFORMATION, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "Relay_8CH"),
-            HOMEKIT_CHARACTERISTIC(MANUFACTURER, "Alex_Khmelenko"),
-            HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, "037A2BABF19D"),
-            HOMEKIT_CHARACTERISTIC(MODEL, "Relay_8CH"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.1"),
-            HOMEKIT_CHARACTERISTIC(IDENTIFY, led_identify),
-            NULL
-        }),
-        HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "Relay1"),
-            HOMEKIT_CHARACTERISTIC(
-                ON, false,
-                .getter=relay1_on_get,
-                .setter=relay1_on_set
-            ),
-            NULL
-        }),
-    HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "Relay2"),
-            HOMEKIT_CHARACTERISTIC(
-                ON, false,
-                .getter=relay2_on_get,
-                .setter=relay2_on_set
-            ),
-            NULL
-        }),
-      HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "Relay3"),
-            HOMEKIT_CHARACTERISTIC(
-                ON, false,
-                .getter=relay3_on_get,
-                .setter=relay3_on_set
-            ),
-            NULL
-        }),
-      HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "Relay4"),
-            HOMEKIT_CHARACTERISTIC(
-                ON, false,
-                .getter=relay4_on_get,
-                .setter=relay4_on_set
-              ),
-              NULL
-          }),
-          HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
-   HOMEKIT_CHARACTERISTIC(NAME, "Relay5"),
-   HOMEKIT_CHARACTERISTIC(
-       ON, false,
-       .getter=relay5_on_get,
-       .setter=relay5_on_set
-   ),
-   NULL
-  }),
-  NULL
-  }),
-  NULL
-  };
-
-homekit_server_config_t config = {
-    .accessories = accessories,
-    .password = "111-11-111"
-};
-
-void user_init(void) {
-    uart_set_baud(0, 115200);
-
-    wifi_init();
-    led_init();
-    homekit_server_init(&config);
 }
