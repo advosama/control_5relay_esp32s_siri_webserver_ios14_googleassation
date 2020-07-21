@@ -15,7 +15,16 @@ then the wifi detail
 then i testd on ESPAsyncWebServer 
 its work fine 
 
-but i can't get the way to add asingil switch on ios14 for all of 5 relays
+i check it 
+after i upload the code to the board 
+1- i open the serial monitor and copy my ip address 
+2- i open a new tab on browser and log in to my ip address for example (192.168.8.105)
+
+now i can control the 5 of relays 
+and switch it on or off
+
+
+but i can't get the way to add asingle switch on ios14 for all of 5 relays
 whail im using 220v ??
 
-pleas help me with the home kit
+pleas help me with the home kit !!
