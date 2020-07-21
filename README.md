@@ -1,7 +1,8 @@
 # esp32s_5relay
 how to add home from ios14  to Arduino esp32s
 
-
+-------------------------------------
+example 1
 ican control 5 realy 220v from ip adress
  using esp32s node mcu
 
@@ -20,12 +21,19 @@ after i upload the code on example 1 to the board
 now i can control the 5  relays 
 and switch it on or off
 
+----------------------------------
+example 2
 
-
-on example 2 i can control 5 relay with google assation using iftt and adafruit
+on example 2 i can control 5 relay with google assation using iftt site and adafruit laybari
 on file you find all detial 
+1- install adafruit laybari
+2- register on io.adafruit.com an crate the dasboard and add the button
+3- rigster on ifttt.com  and like the relay with googe assistion
+4-  insatll google assation app on iphone 
+5- add from shourcut quaik respond to siri
 
-
+now you can control it from siri
+---------------------------------------
 
 but i can't get the way to add the 5 relays to  ios14 with home kit
 
