@@ -1,5 +1,8 @@
 # esp32s_5relay
-how to add home from ios14  to Arduino esp32s
+control 5 relays with esp32s
+with web server 
+with google assation
+with siri
 
 -------------------------------------
 example 1
